@@ -525,26 +525,66 @@ function evaluateMove(move, attacker, defender) {
 
 // Fonction pour choisir la meilleure attaque pour l'IA
 function chooseBestMove(moves, attacker, defender) {
-    let bestScore = -1;
-    let bestMove = null;
-    let bestIndex = 0;
-
-    // On trie les scores en ordre décroissant
-    const moveScores = moves.map((move, index) => {
-        const score = evaluateMove(move, attacker, defender);
-        return { move, index, score };
-    }).sort((a, b) => b.score - a.score);
+    // Vérifier si on a des attaques disponibles
+    if (!moves || moves.length === 0) {
+        return { move: null, index: 0 };
+    }
     
-    // Si on a des attaques, on prend la meilleure
-    if (moveScores.length > 0) {
+    // Filtre pour ne garder que les mouvements valides
+    const validMoves = moves.filter(move => move && move.moveData);
+    
+    if (validMoves.length === 0) {
+        return { move: null, index: 0 };
+    }
+    
+    // Classifier les attaques par efficacité
+    const movesByEffectiveness = validMoves.map((move, index) => {
+        const originalIndex = moves.findIndex(m => m === move);
+        const effectiveness = calculateTypeEffectiveness(
+            move.moveData.type.name,
+            defender.types.map(t => t.type.name)
+        );
         return { 
-            move: moveScores[0].move, 
-            index: moveScores[0].index 
+            move, 
+            originalIndex: originalIndex >= 0 ? originalIndex : index,
+            effectiveness
+        };
+    });
+    
+    // Regrouper les attaques par niveau d'efficacité
+    const superEffective = movesByEffectiveness.filter(m => m.effectiveness > 1);
+    const normalEffective = movesByEffectiveness.filter(m => m.effectiveness === 1);
+    const notVeryEffective = movesByEffectiveness.filter(m => m.effectiveness < 1 && m.effectiveness > 0);
+    
+    // Choisir une attaque en privilégiant les plus efficaces
+    let selectedMove;
+    
+    if (superEffective.length > 0) {
+        // Choisir aléatoirement parmi les super efficaces
+        selectedMove = superEffective[Math.floor(Math.random() * superEffective.length)];
+    } else if (normalEffective.length > 0) {
+        // Choisir aléatoirement parmi les normales
+        selectedMove = normalEffective[Math.floor(Math.random() * normalEffective.length)];
+    } else {
+        // Choisir aléatoirement parmi les peu efficaces
+        selectedMove = notVeryEffective[Math.floor(Math.random() * notVeryEffective.length)];
+    }
+    
+    // Si pour une raison quelconque aucune attaque n'a été sélectionnée
+    if (!selectedMove) {
+        const randomIndex = Math.floor(Math.random() * validMoves.length);
+        const randomMove = validMoves[randomIndex];
+        const originalIndex = moves.findIndex(move => move === randomMove);
+        return { 
+            move: randomMove, 
+            index: originalIndex >= 0 ? originalIndex : 0
         };
     }
-
-    // Cas où il n'y a pas d'attaques disponibles
-    return { move: null, index: 0 };
+    
+    return { 
+        move: selectedMove.move, 
+        index: selectedMove.originalIndex
+    };
 }
 
 // Fonction pour exécuter une attaque

@@ -899,6 +899,24 @@ body {
         padding: 8px 12px;
         font-size: 0.9em;
     }
+    
+    /* Styles pour le bandeau de progression sur mobile */
+    .progress-banner {
+        flex-direction: column;
+        padding: 10px 15px;
+        align-items: flex-start;
+        gap: 5px;
+    }
+    
+    .progress-info, .score-info, .gold-info {
+        width: 100%;
+        justify-content: space-between;
+        font-size: 0.9em;
+    }
+    
+    .progress-text, .score-text, .gold-text {
+        min-width: 85px;
+    }
 }
 
 /* Styles pour l'écran de choix post-combat */

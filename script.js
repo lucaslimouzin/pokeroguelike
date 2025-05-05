@@ -103,14 +103,6 @@ const runBonuses = [
         effect: () => {
             return { stat: 'stab', value: 0.2 };
         }
-    },
-    {
-        id: 'pp_boost',
-        name: 'Endurance',
-        description: 'PP de toutes les attaques +3',
-        effect: () => {
-            return { stat: 'pp', value: 3 };
-        }
     }
 ];
 
@@ -141,12 +133,15 @@ function updateActiveBonuses() {
     // Vider le conteneur
     bonusContainer.innerHTML = '';
     
-    // Si aucun bonus actif, ne rien afficher
+    // Afficher d'abord les améliorations permanentes
+    displayPermanentUpgrades(bonusContainer);
+    
+    // Si aucun bonus temporaire actif, on a déjà affiché les permanents
     if (!currentPokemonData.currentRun.temporaryUpgrades || currentPokemonData.currentRun.temporaryUpgrades.length === 0) {
         return;
     }
     
-    // Ajouter chaque bonus actif
+    // Ajouter chaque bonus temporaire actif
     currentPokemonData.currentRun.temporaryUpgrades.forEach(bonus => {
         const bonusBadge = document.createElement('div');
         bonusBadge.className = `bonus-badge ${bonus.id}`;
@@ -169,14 +164,53 @@ function updateActiveBonuses() {
             case 'type_boost':
                 icon = '⭐';
                 break;
-            case 'pp_boost':
-                icon = '🔄';
-                break;
         }
         
         bonusBadge.innerHTML = `<span>${icon}</span> ${bonus.name}`;
         bonusContainer.appendChild(bonusBadge);
     });
+}
+
+// Fonction pour afficher les améliorations permanentes
+function displayPermanentUpgrades(container) {
+    const upgrades = gameProgress.permanentUpgrades;
+    
+    // Vérifier s'il y a des améliorations permanentes à afficher
+    if (!upgrades || (upgrades.maxHpBonus === 0 && upgrades.attackBonus === 0 && 
+                      upgrades.defenseBonus === 0 && upgrades.criticalChance === 0)) {
+        return;
+    }
+    
+    // Afficher chaque amélioration permanente qui a un niveau > 0
+    if (upgrades.maxHpBonus > 0) {
+        const badge = document.createElement('div');
+        badge.className = 'bonus-badge permanent hp';
+        badge.innerHTML = `<span>❤️</span> HP +${upgrades.maxHpBonus * 5}`;
+        container.appendChild(badge);
+    }
+    
+    if (upgrades.attackBonus > 0) {
+        const badge = document.createElement('div');
+        badge.className = 'bonus-badge permanent attack';
+        badge.innerHTML = `<span>⚔️</span> ATT +${upgrades.attackBonus * 3}`;
+        container.appendChild(badge);
+    }
+    
+    if (upgrades.defenseBonus > 0) {
+        const badge = document.createElement('div');
+        badge.className = 'bonus-badge permanent defense';
+        badge.innerHTML = `<span>🛡️</span> DEF +${upgrades.defenseBonus * 3}`;
+        container.appendChild(badge);
+    }
+    
+    if (upgrades.criticalChance > 0) {
+        const badge = document.createElement('div');
+        badge.className = 'bonus-badge permanent crit';
+        badge.innerHTML = `<span>🎯</span> CRIT +${upgrades.criticalChance * 5}%`;
+        container.appendChild(badge);
+    }
+    
+    // Nous ne créons plus de séparateurs ou de titres pour garder tout sur la même ligne
 }
 
 // Fonction pour gérer la transition vers la scène de combat
@@ -211,8 +245,10 @@ function startBattle() {
                 document.getElementById('battle-gold').textContent = gameProgress.gold;
             }
             
-            // Mettre à jour l'affichage des bonus actifs
+            // Mettre à jour l'affichage des bonus actifs (y compris les améliorations permanentes)
             updateActiveBonuses();
+            
+            console.log("Chargement des Pokémon avec les améliorations permanentes:", gameProgress.permanentUpgrades);
             
             // Charger les deux Pokémon
             await Promise.all([
@@ -241,11 +277,23 @@ function getRandomInt(min, max) {
 
 // Fonction pour calculer les HP max en fonction du niveau
 function calculateMaxHP(baseHP, level) {
-    return Math.floor((2 * baseHP * level) / 100 + level + 10);
+    console.log(`Calcul des HP max: Base HP = ${baseHP}, Niveau = ${level}`);
+    
+    // Formule de base pour les HP max
+    let maxHP = Math.floor((2 * baseHP * level) / 100 + level + 10);
+    
+    // Ajouter le bonus HP des améliorations permanentes directement ici
+    // pour s'assurer qu'il est toujours pris en compte
+    const hpBonus = gameProgress.permanentUpgrades.maxHpBonus * 5;
+    maxHP += hpBonus;
+    
+    console.log(`HP max calculés: ${maxHP} (inclut bonus permanent de +${hpBonus})`);
+    return maxHP;
 }
 
 // Fonction pour calculer une statistique en fonction du niveau
 function calculateStat(baseStat, level) {
+    // La formule originale du jeu pour calculer une statistique
     return Math.floor((2 * baseStat * level) / 100 + 5);
 }
 
@@ -301,86 +349,96 @@ async function checkLevelUp() {
 
 // Fonction pour calculer les dégâts
 function calculateDamage(move, attacker, defender, attackerLevel) {
-    // Formule simplifiée des dégâts Pokémon avec niveau
-    const power = move.power || 0;
-    const attackBase = attacker.stats.find(stat => stat.stat.name === 'attack').base_stat;
-    const defenseBase = defender.stats.find(stat => stat.stat.name === 'defense').base_stat;
-    
-    // Calculer les stats en fonction du niveau
-    let attack = calculateStat(attackBase, attackerLevel);
-    let defense = calculateStat(defenseBase, attackerLevel);
-    
-    // Appliquer les bonus temporaires pour l'attaquant allié
-    if (attacker === currentPokemonData.ally && currentPokemonData.currentRun.temporaryUpgrades.length) {
-        currentPokemonData.currentRun.temporaryUpgrades.forEach(bonus => {
-            const effect = bonus.effect(attacker);
-            if (effect.stat === 'attack') {
-                attack += effect.value;
-            }
-        });
+    // Vérifier si les données nécessaires sont disponibles
+    if (!move || !attacker || !defender) {
+        console.error('Données manquantes pour le calcul des dégâts');
+        return 0;
     }
+
+    // Récupérer la puissance de l'attaque, par défaut à 50 si non trouvée
+    const power = move.power || 50;
     
-    // Appliquer les bonus temporaires pour le défenseur allié
-    if (defender === currentPokemonData.ally && currentPokemonData.currentRun.temporaryUpgrades.length) {
-        currentPokemonData.currentRun.temporaryUpgrades.forEach(bonus => {
-            const effect = bonus.effect(defender);
-            if (effect.stat === 'defense') {
-                defense += effect.value;
-            }
-        });
-    }
+    // Déterminer si l'attaque est physique ou spéciale
+    const isPhysical = move.damage_class && move.damage_class.name === 'physical';
     
-    // Formule: ((2 * niveau * 0.4 + 2) * puissance * attaque / défense) / 50 + 2
-    let damage = Math.floor(((2 * attackerLevel * 0.4 + 2) * power * attack / defense) / 50 + 2);
+    // Récupérer les stats correspondantes
+    const attackStat = isPhysical ? 
+        attacker.stats.find(s => s.stat.name === 'attack').base_stat : 
+        attacker.stats.find(s => s.stat.name === 'special-attack').base_stat;
     
-    // Vérifier si l'attaque est du même type que l'attaquant (STAB - Same Type Attack Bonus)
-    const moveType = move.type.name.toLowerCase();
-    const attackerTypes = attacker.types.map(t => t.type.name.toLowerCase());
-    let stabMultiplier = 1;
+    const defenseStat = isPhysical ? 
+        defender.stats.find(s => s.stat.name === 'defense').base_stat : 
+        defender.stats.find(s => s.stat.name === 'special-defense').base_stat;
+
+    // Calculer le modificateur de type
+    let typeMod = 1.0;
     
+    // Récupérer le type du mouvement
+    const moveType = move.type ? move.type.name : "normal";
+    
+    // Récupérer les types du défenseur
+    const defenderTypes = defender.types.map(t => t.type.name);
+    
+    // Calculer l'efficacité de type
+    typeMod = calculateTypeEffectiveness(moveType, defenderTypes);
+    
+    // Vérifier le STAB (Same Type Attack Bonus)
+    let stabMod = 1.0;
+    const attackerTypes = attacker.types.map(t => t.type.name);
     if (attackerTypes.includes(moveType)) {
-        stabMultiplier = 1.5; // Bonus STAB standard
+        stabMod = 1.5;
         
-        // Vérifier si l'attaquant a un bonus d'affinité élémentaire
-        if (attacker === currentPokemonData.ally) {
-            const stabBonus = currentPokemonData.currentRun.temporaryUpgrades.find(bonus => bonus.id === 'type_boost');
-            if (stabBonus) {
-                const effect = stabBonus.effect();
-                stabMultiplier += effect.value;
-            }
+        // Bonus supplémentaire du bonus temporaire de type
+        const typeBonus = currentPokemonData.currentRun.temporaryUpgrades.find(bonus => bonus.id === 'type_boost');
+        if (typeBonus) {
+            stabMod += typeBonus.effect().value;
         }
     }
     
-    damage = Math.floor(damage * stabMultiplier);
+    // Gérer les coups critiques
+    let critMod = 1.0;
+    let baseCritChance = 6.25; // 1/16 chance de base
     
-    // Vérifier les coups critiques
-    let isCritical = false;
-    let critChance = 6.25; // 1/16 chance de base (6.25%)
-    
-    // Ajouter les bonus de coup critique
-    if (attacker === currentPokemonData.ally) {
-        const critBonus = currentPokemonData.currentRun.temporaryUpgrades.find(bonus => bonus.id === 'crit_chance');
-        if (critBonus) {
-            const effect = critBonus.effect();
-            critChance += effect.value;
-        }
+    // Ajouter la chance de coup critique des améliorations permanentes
+    if (gameProgress.permanentUpgrades.criticalChance > 0) {
+        baseCritChance += gameProgress.permanentUpgrades.criticalChance * 5; // +5% par niveau
     }
     
-    if (Math.random() * 100 < critChance) {
-        damage = Math.floor(damage * 1.5);
-        isCritical = true;
-        
-        if (attacker === currentPokemonData.ally) {
-            currentPokemonData.currentRun.criticalHits++;
-        }
+    // Ajouter la chance de coup critique des bonus temporaires
+    const critBonus = currentPokemonData.currentRun.temporaryUpgrades.find(bonus => bonus.id === 'crit_chance');
+    if (critBonus) {
+        baseCritChance += critBonus.effect().value;
     }
     
-    // Ajout d'un élément aléatoire (85-100%)
-    damage = Math.floor(damage * (85 + Math.random() * 15) / 100);
+    // Déterminer si un coup critique se produit
+    const isCritical = Math.random() * 100 < baseCritChance;
+    if (isCritical) {
+        critMod = 1.5;
+        currentPokemonData.currentRun.criticalHits++; // Compteur de coups critiques
+    }
+    
+    // Calculer le niveau de l'attaquant (pour les ennemis, c'est leur ID jusqu'à 10 max)
+    const level = attackerLevel || 5; // Niveau par défaut si non spécifié
+    
+    // Formule de calcul des dégâts basée sur les jeux Pokémon
+    let damage = Math.floor(((2 * level / 5 + 2) * power * attackStat / defenseStat) / 50) + 2;
+    
+    // Appliquer les modificateurs
+    damage = Math.floor(damage * typeMod * stabMod * critMod);
+    
+    // Ajouter une variation aléatoire de ±15%
+    const randomMod = 0.85 + Math.random() * 0.3;
+    damage = Math.floor(damage * randomMod);
+    
+    // Garantir un minimum de 1 point de dégât
+    damage = Math.max(1, damage);
+    
+    console.log(`Calcul de dégâts: ${damage} (Type: ${typeMod}, STAB: ${stabMod}, Crit: ${critMod}, Critique: ${isCritical}, CritChance: ${baseCritChance}%)`);
     
     return {
-        damage: Math.max(1, damage), // Au moins 1 point de dégâts
-        isCritical
+        damage,
+        isCritical,
+        typeEffectiveness: typeMod
     };
 }
 
@@ -412,13 +470,6 @@ async function updateHPDisplay(position, currentHP, maxHP, damage = 0) {
         currentPokemonData.allyCurrHP = currentHP;
         currentPokemonData.allyMaxHP = maxHP;
     }
-}
-
-// Fonction pour mettre à jour l'affichage des PP
-function updatePPDisplay(moveIndex, currentPP, maxPP) {
-    const moveButton = document.getElementById(`move-${moveIndex}`);
-    const ppElement = moveButton.querySelector('.move-pp');
-    ppElement.textContent = `PP ${currentPP}/${maxPP}`;
 }
 
 // Fonction pour calculer l'efficacité du type
@@ -459,10 +510,7 @@ function evaluateMove(move, attacker, defender) {
 
     const power = move.moveData.power || 0;
     const accuracy = move.moveData.accuracy || 100;
-    const pp = move.currentPP;
     
-    if (pp <= 0) return 0;
-
     // Calculer l'efficacité du type
     const effectiveness = calculateTypeEffectiveness(
         move.moveData.type.name,
@@ -470,7 +518,7 @@ function evaluateMove(move, attacker, defender) {
     );
 
     // Score basé sur les dégâts potentiels, la précision et l'efficacité du type
-    const score = (power * (accuracy/100) * effectiveness * (pp/move.maxPP));
+    const score = power * (accuracy/100) * effectiveness;
     
     return score;
 }
@@ -481,16 +529,22 @@ function chooseBestMove(moves, attacker, defender) {
     let bestMove = null;
     let bestIndex = 0;
 
-    moves.forEach((move, index) => {
+    // On trie les scores en ordre décroissant
+    const moveScores = moves.map((move, index) => {
         const score = evaluateMove(move, attacker, defender);
-        if (score > bestScore) {
-            bestScore = score;
-            bestMove = move;
-            bestIndex = index;
-        }
-    });
+        return { move, index, score };
+    }).sort((a, b) => b.score - a.score);
+    
+    // Si on a des attaques, on prend la meilleure
+    if (moveScores.length > 0) {
+        return { 
+            move: moveScores[0].move, 
+            index: moveScores[0].index 
+        };
+    }
 
-    return { move: bestMove, index: bestIndex };
+    // Cas où il n'y a pas d'attaques disponibles
+    return { move: null, index: 0 };
 }
 
 // Fonction pour exécuter une attaque
@@ -504,11 +558,11 @@ async function executeMove(moveIndex, isAlly = true) {
     const defenderPosition = isAlly ? 'right' : 'left';
     const attackerLevel = isAlly ? currentPokemonData.allyLevel : Math.min(currentPokemonData.currentEnemyId, 10);
     
-    if (!moves[moveIndex] || moves[moveIndex].currentPP <= 0) {
-        // Choisir une autre attaque si celle-ci n'a plus de PP
+    if (!moves[moveIndex]) {
+        // Choisir une autre attaque si celle-ci n'existe pas
         const newMove = chooseBestMove(moves, attacker, defender);
         if (!newMove.move) {
-            await displayMessage("Plus aucune attaque disponible !");
+            await displayMessage("Aucune attaque disponible !");
             return;
         }
         moveIndex = newMove.index;
@@ -520,9 +574,6 @@ async function executeMove(moveIndex, isAlly = true) {
     const move = moves[moveIndex];
     await displayMessage(`${attackerName} utilise ${move.moveData.name} !`);
     
-    // Réduire les PP
-    move.currentPP--;
-
     // Calculer et appliquer les dégâts
     const damageResult = calculateDamage(move.moveData, attacker, defender, attackerLevel);
     const damage = damageResult.damage;
@@ -573,7 +624,7 @@ async function executeMove(moveIndex, isAlly = true) {
             await gainExperience();
             
             // Gagner de l'or après la victoire sur un ennemi
-            const goldEarned = Math.floor(10 * (1 + currentPokemonData.allyLevel * 0.1));
+            const goldEarned = Math.floor(25 * (1 + currentPokemonData.allyLevel * 0.1));
             earnGold(goldEarned);
             await displayMessage(`Vous avez gagné ${goldEarned} gold !`);
             
@@ -624,6 +675,22 @@ async function getMoveDetails(moveUrl) {
 // Fonction pour appliquer les améliorations permanentes
 function applyPermanentUpgrades(pokemon) {
     const upgrades = gameProgress.permanentUpgrades;
+    
+    // Journaliser les statistiques avant l'application des améliorations
+    const hpBefore = pokemon.stats.find(stat => stat.stat.name === 'hp').base_stat;
+    const attackBefore = pokemon.stats.find(stat => stat.stat.name === 'attack').base_stat;
+    const defenseBefore = pokemon.stats.find(stat => stat.stat.name === 'defense').base_stat;
+    
+    console.log('Statistiques avant amélioration:', { 
+        hp: hpBefore, 
+        attack: attackBefore, 
+        defense: defenseBefore,
+        upgrades: upgrades
+    });
+    
+    // Faire une copie profonde des stats pour éviter les problèmes de référence
+    pokemon.stats = JSON.parse(JSON.stringify(pokemon.stats));
+    
     pokemon.stats.forEach(stat => {
         switch(stat.stat.name) {
             case 'hp':
@@ -637,6 +704,23 @@ function applyPermanentUpgrades(pokemon) {
                 break;
         }
     });
+    
+    // La chance de critique est appliquée lors du calcul des dégâts, pas ici
+    
+    // Journaliser les statistiques après l'application des améliorations
+    const hpAfter = pokemon.stats.find(stat => stat.stat.name === 'hp').base_stat;
+    const attackAfter = pokemon.stats.find(stat => stat.stat.name === 'attack').base_stat;
+    const defenseAfter = pokemon.stats.find(stat => stat.stat.name === 'defense').base_stat;
+    
+    console.log('Statistiques après amélioration:', { 
+        hp: hpAfter, 
+        attack: attackAfter, 
+        defense: defenseAfter,
+        hpDifference: hpAfter - hpBefore,
+        attackDifference: attackAfter - attackBefore,
+        defenseDifference: defenseAfter - defenseBefore
+    });
+    
     return pokemon;
 }
 
@@ -646,11 +730,6 @@ async function getPokemonById(id, position = 'left') {
         const pokemonResponse = await fetch(`https://pokeapi.co/api/v2/pokemon/${id}`);
         const pokemon = await pokemonResponse.json();
 
-        // Appliquer les améliorations permanentes
-        if (position === 'left') {
-            applyPermanentUpgrades(pokemon);
-        }
-
         // Mettre à jour l'interface
         const imageElement = document.getElementById(`pokemon-image-${position}`);
         const nameElement = document.getElementById(`pokemon-name-${position}`);
@@ -658,6 +737,21 @@ async function getPokemonById(id, position = 'left') {
         // Sélectionner le bon sprite en fonction de la position
         let spriteUrl;
         if (position === 'left') {
+            // Appliquer les améliorations permanentes AVANT de calculer les HP
+            console.log('Avant améliorations:', {
+                baseHP: pokemon.stats.find(stat => stat.stat.name === 'hp').base_stat,
+                niveau: currentPokemonData.allyLevel
+            });
+            
+            // Appliquer les améliorations permanentes
+            applyPermanentUpgrades(pokemon);
+            
+            console.log('Après améliorations:', {
+                baseHP: pokemon.stats.find(stat => stat.stat.name === 'hp').base_stat,
+                niveau: currentPokemonData.allyLevel,
+                améliorations: gameProgress.permanentUpgrades
+            });
+            
             spriteUrl = pokemon.sprites.back_default || pokemon.sprites.front_default;
             currentPokemonData.ally = pokemon;
         } else {
@@ -687,19 +781,25 @@ async function getPokemonById(id, position = 'left') {
             const baseHP = pokemon.stats.find(stat => stat.stat.name === 'hp').base_stat;
             let currentHP, maxHP;
             
+            console.log(`BaseHP après amélioration: ${baseHP}, Niveau actuel: ${currentPokemonData.allyLevel}`);
+            
             // Si c'est le premier combat ou après une montée de niveau, recalculer les HP max
             if (currentPokemonData.allyMaxHP === null || currentPokemonData.currentRun.levelUps > 0) {
                 maxHP = calculateMaxHP(baseHP, currentPokemonData.allyLevel);
+                console.log(`Nouveaux HP Max calculés: ${maxHP}`);
                 currentPokemonData.allyMaxHP = maxHP;
                 
                 // Si première fois, HP actuels = HP max, sinon garder les HP actuels
                 if (currentPokemonData.allyCurrHP === null) {
                     currentHP = maxHP;
                     currentPokemonData.allyCurrHP = currentHP;
+                    console.log(`Première partie, HP actuels = HP Max: ${currentHP}`);
                 } else {
                     // Après une montée de niveau, on ajoute la différence d'HP max aux HP actuels
-                    const hpDifference = maxHP - currentPokemonData.allyMaxHP;
+                    const oldMaxHP = currentPokemonData.allyMaxHP;
+                    const hpDifference = maxHP - oldMaxHP;
                     currentHP = currentPokemonData.allyCurrHP + hpDifference;
+                    console.log(`Montée de niveau, Anciens HP max: ${oldMaxHP}, Nouveaux: ${maxHP}, Différence: ${hpDifference}`);
                     currentPokemonData.allyCurrHP = currentHP;
                     currentPokemonData.currentRun.levelUps = 0; // Réinitialiser le compteur de montées de niveau
                 }
@@ -707,6 +807,7 @@ async function getPokemonById(id, position = 'left') {
                 // Utiliser les HP sauvegardés
                 currentHP = currentPokemonData.allyCurrHP;
                 maxHP = currentPokemonData.allyMaxHP;
+                console.log(`HP sauvegardés utilisés: Actuels ${currentHP}, Max ${maxHP}`);
             }
             
             // Mettre à jour l'affichage des HP
@@ -755,9 +856,7 @@ async function getPokemonById(id, position = 'left') {
                 const moveData = await getMoveDetails(moveUrl);
                 if (moveData) {
                     movesArray[i] = {
-                        moveData: moveData,
-                        currentPP: moveData.pp,
-                        maxPP: moveData.pp
+                        moveData: moveData
                     };
                 }
             } catch (error) {
@@ -808,8 +907,8 @@ function setBattleSpeed(speed) {
 // Fonction pour sauvegarder la progression
 function saveProgress() {
     try {
-        localStorage.setItem('pokemonRogueLiteProgress', JSON.stringify(gameProgress));
-        console.log('Sauvegarde réussie:', gameProgress);
+        localStorage.setItem('pokeBattleProgress', JSON.stringify(gameProgress));
+        console.log('Progression sauvegardée avec succès');
     } catch (error) {
         console.error('Erreur lors de la sauvegarde:', error);
     }
@@ -818,41 +917,70 @@ function saveProgress() {
 // Fonction pour charger la progression
 function loadProgress() {
     try {
-        const savedProgress = localStorage.getItem('pokemonRogueLiteProgress');
+        const savedProgress = localStorage.getItem('pokeBattleProgress');
         if (savedProgress) {
             const parsedProgress = JSON.parse(savedProgress);
             
-            // Fusion des objets pour s'assurer que toutes les propriétés sont présentes
+            // Mettre à jour le gameProgress
             gameProgress.totalRuns = parsedProgress.totalRuns || 0;
             gameProgress.bestScore = parsedProgress.bestScore || 0;
             gameProgress.totalVictories = parsedProgress.totalVictories || 0;
             gameProgress.gold = parsedProgress.gold || 0;
             
-            // Assigner les starters débloqués
+            // Charger les Pokémon débloqués
             if (parsedProgress.unlockedStarters) {
-                Object.keys(parsedProgress.unlockedStarters).forEach(key => {
-                    if (gameProgress.unlockedStarters.hasOwnProperty(key)) {
-                        gameProgress.unlockedStarters[key] = parsedProgress.unlockedStarters[key];
-                    }
-                });
+                gameProgress.unlockedStarters = parsedProgress.unlockedStarters;
             }
             
-            // Assigner les améliorations permanentes
+            // Charger les améliorations permanentes
             if (parsedProgress.permanentUpgrades) {
-                Object.keys(parsedProgress.permanentUpgrades).forEach(key => {
-                    if (gameProgress.permanentUpgrades.hasOwnProperty(key)) {
-                        gameProgress.permanentUpgrades[key] = parsedProgress.permanentUpgrades[key];
-                    }
-                });
+                // S'assurer que toutes les améliorations sont bien définies
+                gameProgress.permanentUpgrades = {
+                    maxHpBonus: parsedProgress.permanentUpgrades.maxHpBonus || 0,
+                    attackBonus: parsedProgress.permanentUpgrades.attackBonus || 0,
+                    defenseBonus: parsedProgress.permanentUpgrades.defenseBonus || 0,
+                    criticalChance: parsedProgress.permanentUpgrades.criticalChance || 0
+                };
+                
+                console.log("Améliorations permanentes chargées:", gameProgress.permanentUpgrades);
+            } else {
+                // Initialiser les améliorations par défaut si elles n'existent pas
+                gameProgress.permanentUpgrades = {
+                    maxHpBonus: 0,
+                    attackBonus: 0,
+                    defenseBonus: 0,
+                    criticalChance: 0
+                };
             }
             
-            console.log('Données chargées avec succès:', gameProgress);
+            // Pour une session de test, décommenter cette ligne pour avoir beaucoup d'or
+            // gameProgress.gold = 5000;
+            
+            console.log('Progression chargée avec succès:', gameProgress);
         } else {
-            console.log('Aucune sauvegarde trouvée, utilisation des valeurs par défaut');
+            console.log('Aucune progression sauvegardée trouvée, utilisation des valeurs par défaut');
+            
+            // Pour une session de test, décommenter cette ligne pour avoir beaucoup d'or
+            // gameProgress.gold = 5000;
         }
     } catch (error) {
-        console.error('Erreur lors du chargement:', error);
+        console.error('Erreur lors du chargement de la progression:', error);
+        
+        // Réinitialiser aux valeurs par défaut en cas d'erreur
+        gameProgress.totalRuns = 0;
+        gameProgress.bestScore = 0;
+        gameProgress.totalVictories = 0;
+        gameProgress.gold = 0;
+        gameProgress.permanentUpgrades = {
+            maxHpBonus: 0,
+            attackBonus: 0,
+            defenseBonus: 0,
+            criticalChance: 0
+        };
     }
+    
+    // Mettre à jour l'affichage des statistiques
+    updateStats();
 }
 
 // Fonction pour gagner de l'or
@@ -911,6 +1039,39 @@ function purchaseUpgrade(upgradeType) {
         // Mettre à jour l'affichage des niveaux d'amélioration
         document.getElementById(`${upgradeType}-upgrade-level`).textContent = `Niv. ${gameProgress.permanentUpgrades[upgradeType]}`;
         
+        // Mettre à jour l'affichage des bonus actifs si on est en combat
+        if (currentPokemonData.gameStarted) {
+            updateActiveBonuses();
+            
+            // Si c'est une amélioration de HP, mettre à jour les HP du Pokémon allié
+            if (upgradeType === 'maxHpBonus' && currentPokemonData.ally) {
+                const baseHP = currentPokemonData.ally.stats.find(stat => stat.stat.name === 'hp').base_stat;
+                // Recalculer les HP max avec le nouveau bonus
+                const newMaxHP = calculateMaxHP(baseHP, currentPokemonData.allyLevel);
+                // Calculer l'augmentation d'HP (5 points par niveau)
+                const hpIncrease = 5;
+                // Mettre à jour les HP actuels et max
+                const currentHP = parseInt(document.getElementById('current-hp-left').textContent) + hpIncrease;
+                document.getElementById('current-hp-left').textContent = currentHP;
+                document.getElementById('max-hp-left').textContent = newMaxHP;
+                // Mettre à jour l'affichage de la barre de HP
+                updateHPDisplay('left', currentHP, newMaxHP);
+                // Mettre à jour les valeurs dans l'objet de données
+                currentPokemonData.allyCurrHP = currentHP;
+                currentPokemonData.allyMaxHP = newMaxHP;
+            }
+            
+            // Si c'est une amélioration d'attaque ou de défense, mettre à jour le Pokémon allié
+            if ((upgradeType === 'attackBonus' || upgradeType === 'defenseBonus') && currentPokemonData.ally) {
+                // Réappliquer les améliorations permanentes au Pokémon actuel
+                applyPermanentUpgrades(currentPokemonData.ally);
+                console.log(`Amélioration ${upgradeType} achetée, stats mises à jour:`, {
+                    attack: currentPokemonData.ally.stats.find(stat => stat.stat.name === 'attack').base_stat,
+                    defense: currentPokemonData.ally.stats.find(stat => stat.stat.name === 'defense').base_stat
+                });
+            }
+        }
+        
         return true;
     }
     
@@ -965,7 +1126,7 @@ function endRun(wasVictorious) {
         gameProgress.totalVictories++;
         
         // Calculer l'or gagné - base sur le score et bonus selon le niveau
-        const goldEarned = Math.floor(currentPokemonData.score * 15 * (1 + currentPokemonData.allyLevel * 0.1));
+        const goldEarned = Math.floor(currentPokemonData.score * 35 * (1 + currentPokemonData.allyLevel * 0.1));
         earnGold(goldEarned);
     }
     
@@ -985,10 +1146,15 @@ function startGameWithPokemon(pokemonId) {
         return;
     }
     
+    // Réinitialiser les données pour une nouvelle partie
     currentPokemonData.allyId = pokemonId;
     currentPokemonData.allyLevel = 1;
     currentPokemonData.allyCurrHP = null; // Réinitialiser les HP pour une nouvelle partie
-    currentPokemonData.allyMaxHP = null;
+    currentPokemonData.allyMaxHP = null; // Réinitialiser les HP max pour forcer le recalcul avec les améliorations
+    
+    currentPokemonData.currentEnemyId = 1; // S'assurer de commencer avec le premier ennemi
+    currentPokemonData.score = 0; // Réinitialiser le score
+    
     currentPokemonData.currentRun = {
         temporaryUpgrades: [],
         pokemonDefeated: [],
@@ -999,6 +1165,9 @@ function startGameWithPokemon(pokemonId) {
         experienceGained: 0,
         levelUps: 0
     };
+    
+    // Applique directement les améliorations permanentes achetées
+    console.log("Démarrage d'une nouvelle partie avec les améliorations permanentes:", gameProgress.permanentUpgrades);
     
     // Afficher l'écran de sélection de bonus au lieu de démarrer directement le combat
     showBonusSelection();
@@ -1102,15 +1271,6 @@ function applyTemporaryBonuses(pokemon, position) {
             document.getElementById('current-hp-left').textContent = currentHP + effect.value;
             document.getElementById('max-hp-left').textContent = newMaxHP;
             updateHPDisplay('left', currentHP + effect.value, newMaxHP);
-        } 
-        else if (effect.stat === 'pp') {
-            // Bonus de PP
-            currentPokemonData.moves.forEach(move => {
-                if (move && move.moveData) {
-                    move.currentPP += effect.value;
-                    move.maxPP += effect.value;
-                }
-            });
         }
         // Les autres types de bonus sont appliqués directement lors du calcul des dégâts
     });
@@ -1471,7 +1631,7 @@ function triggerRandomEvent() {
             name: 'Trésor trouvé!',
             description: 'Vous avez trouvé un petit trésor caché!',
             effect: () => {
-                const goldAmount = Math.floor(30 + Math.random() * 70); // Entre 30 et 100 d'or
+                const goldAmount = Math.floor(75 + Math.random() * 75); // Entre 75 et 150 d'or
                 earnGold(goldAmount);
                 return `Vous avez gagné ${goldAmount} Gold!`;
             }

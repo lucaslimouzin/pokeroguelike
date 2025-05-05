@@ -419,6 +419,12 @@ body {
     font-size: 1.2em;
 }
 
+.gold-info {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+}
+
 .progress-text, .score-text, .gold-text {
     font-weight: bold;
     color: #FFD700;
@@ -426,6 +432,19 @@ body {
 
 #current-progress, #current-score, #battle-gold {
     color: white;
+}
+
+/* Styles spécifiques pour l'affichage du gold */
+.gold-value-container {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.gold-info .gold-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 /* Styles pour l'écran de sélection */
@@ -786,58 +805,102 @@ body {
 
 /* Styles pour les bonus actifs */
 .active-bonuses {
-    margin-top: 10px;
     display: flex;
     flex-wrap: wrap;
-    gap: 5px;
+    gap: 3px;
+    margin-top: 8px;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 22px;
 }
 
 .bonus-badge {
-    background: rgba(0, 0, 0, 0.2);
-    padding: 3px 8px;
-    border-radius: 10px;
-    font-size: 0.7em;
+    font-size: 0.65em;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 15px;
+    padding: 2px 6px;
     color: white;
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    gap: 2px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    cursor: default;
+    margin-right: 2px;
+    white-space: nowrap;
 }
 
+.bonus-badge span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Styles pour les badges d'améliorations permanentes */
+.bonus-badge.permanent {
+    background-color: rgba(255, 215, 0, 0.2);
+    border: 1px solid rgba(255, 215, 0, 0.5);
+}
+
+.bonus-badge.permanent.hp {
+    background-color: rgba(255, 0, 0, 0.2);
+    border-color: rgba(255, 0, 0, 0.5);
+}
+
+.bonus-badge.permanent.attack {
+    background-color: rgba(255, 101, 0, 0.2);
+    border-color: rgba(255, 101, 0, 0.5);
+}
+
+.bonus-badge.permanent.defense {
+    background-color: rgba(0, 112, 255, 0.2);
+    border-color: rgba(0, 112, 255, 0.5);
+}
+
+.bonus-badge.permanent.crit {
+    background-color: rgba(255, 255, 0, 0.2);
+    border-color: rgba(255, 255, 0, 0.5);
+}
+
+/* Styles pour les bonus temporaires */
 .bonus-badge.hp_boost {
-    background: linear-gradient(to right, #2ecc71, #27ae60);
+    background-color: rgba(255, 0, 0, 0.3);
 }
 
 .bonus-badge.attack_boost {
-    background: linear-gradient(to right, #e74c3c, #c0392b);
+    background-color: rgba(255, 101, 0, 0.3);
 }
 
 .bonus-badge.defense_boost {
-    background: linear-gradient(to right, #3498db, #2980b9);
+    background-color: rgba(0, 112, 255, 0.3);
 }
 
 .bonus-badge.crit_chance {
-    background: linear-gradient(to right, #f39c12, #d35400);
+    background-color: rgba(255, 255, 0, 0.3);
 }
 
 .bonus-badge.type_boost {
-    background: linear-gradient(to right, #9b59b6, #8e44ad);
-}
-
-.bonus-badge.pp_boost {
-    background: linear-gradient(to right, #1abc9c, #16a085);
+    background-color: rgba(128, 0, 255, 0.3);
 }
 
 /* Styles pour Gold */
 .gold-item {
     display: flex;
+    flex-direction: column;
     align-items: center;
+}
+
+.gold-item .gold-value-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     gap: 5px;
 }
 
 .gold-icon {
     font-size: 1.2em;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .gold-cost {
@@ -916,6 +979,17 @@ body {
     
     .progress-text, .score-text, .gold-text {
         min-width: 85px;
+    }
+    
+    /* Ajustements du gold sur mobile */
+    .gold-value-container {
+        display: inline-flex;
+        align-items: center;
+    }
+    
+    .gold-icon {
+        font-size: 1.1em;
+        margin-left: 2px;
     }
 }
 
@@ -1236,4 +1310,17 @@ body {
         font-size: 1.1em;
         padding: 8px 15px;
     }
+}
+
+/* Ajuster spécifiquement les valeurs dans la barre de progression */
+.progress-banner .gold-value-container {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+}
+
+.progress-banner .gold-icon {
+    margin-left: 2px;
+    font-size: 1.1em;
 } 
